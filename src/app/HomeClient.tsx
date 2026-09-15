@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DrawResult } from "@/lib/drand";
+import HoldersSection from "./HoldersSection";
 
 const POOL = Array.from({ length: 50 }, (_, i) => i + 1);
 const PICK = 6;
@@ -251,6 +252,8 @@ export default function HomeClient({
           />
         </div>
       </section>
+
+      <HoldersSection draw={draw} />
 
       <FairnessSection draw={draw} />
 
