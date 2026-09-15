@@ -26,7 +26,6 @@ export default function HomeClient({
   const [draw, setDraw] = useState<DrawResult | null>(initialDraw);
   const [meta, setMeta] = useState<BeaconMeta | null>(null);
   const [drawing, setDrawing] = useState(false);
-  const [autoDraw, setAutoDraw] = useState(true);
   const [history, setHistory] = useState<DrawResult[]>(
     initialDraw ? [initialDraw] : [],
   );
@@ -94,9 +93,9 @@ export default function HomeClient({
     if (!meta) return;
     if (now >= meta.nextDrawAt + 2) {
       fetchMeta();
-      if (autoDraw && !drawing) runDraw();
+      if (!drawing) runDraw();
     }
-  }, [now, meta, autoDraw, drawing, fetchMeta, runDraw]);
+  }, [now, meta, drawing, fetchMeta, runDraw]);
 
   const secondsToNext = meta
     ? Math.max(0, meta.nextDrawAt + 2 - now)
@@ -117,9 +116,18 @@ export default function HomeClient({
 
       <section className="grid gap-6 md:grid-cols-[1.15fr_1fr]">
         <div className="panel p-6 md:p-8">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="chip">Live Draw</div>
+              <div className="chip">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    drawing
+                      ? "bg-[color:var(--gold-bright)] shadow-[0_0_8px_rgba(242,217,141,0.9)] animate-pulse"
+                      : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]"
+                  }`}
+                />
+                {drawing ? "Drawing…" : "Live · auto-drawing"}
+              </div>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">
                 Latest winning numbers
               </h2>
@@ -128,16 +136,9 @@ export default function HomeClient({
                 <span className="mono text-[color:var(--gold-bright)]">
                   #{draw?.round ?? "…"}
                 </span>
-                .
+                . A new round settles every 30 seconds.
               </p>
             </div>
-            <button
-              onClick={runDraw}
-              disabled={drawing}
-              className="btn-primary text-sm"
-            >
-              {drawing ? "Drawing…" : "Draw now"}
-            </button>
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -181,15 +182,6 @@ export default function HomeClient({
             />
           </div>
 
-          <label className="mt-6 flex cursor-pointer items-center gap-3 text-sm text-white/70">
-            <input
-              type="checkbox"
-              checked={autoDraw}
-              onChange={(e) => setAutoDraw(e.target.checked)}
-              className="h-4 w-4 accent-[color:var(--gold)]"
-            />
-            Auto-draw the moment each new drand round is available
-          </label>
         </div>
 
         <div className="panel p-6 md:p-8">
