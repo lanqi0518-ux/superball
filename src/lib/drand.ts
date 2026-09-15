@@ -9,6 +9,24 @@ export const DRAND_CHAIN_HASH =
 export const DRAND_PERIOD_SECONDS = 30;
 export const DRAND_GENESIS = 1595431050; // seconds since epoch for round 1
 
+// SuperBall draws once every 3 minutes, locked to drand rounds that fall on
+// a 180-second boundary from genesis. Every 6th round is a "draw round".
+export const DRAW_INTERVAL_SECONDS = 180;
+export const ROUNDS_PER_DRAW =
+  DRAW_INTERVAL_SECONDS / DRAND_PERIOD_SECONDS; // 6
+
+// Returns the most recent drand round that is a "draw round" (aligned to
+// the 3-minute cadence) at or before `unixSeconds`.
+export function currentDrawRound(unixSeconds: number): number {
+  const round = roundAt(unixSeconds);
+  const offset = (round - 1) % ROUNDS_PER_DRAW;
+  return round - offset;
+}
+
+export function nextDrawRound(unixSeconds: number): number {
+  return currentDrawRound(unixSeconds) + ROUNDS_PER_DRAW;
+}
+
 export type DrandBeacon = {
   round: number;
   randomness: string;
@@ -106,7 +124,7 @@ export type DrawResult = {
 export async function deriveDraw(
   beacon: DrandBeacon,
   poolSize = 50,
-  pickCount = 6,
+  pickCount = 1,
 ): Promise<DrawResult> {
   const seed = await sha256(hexToBytes(beacon.signature));
   const pool = Array.from({ length: poolSize }, (_, i) => i + 1);

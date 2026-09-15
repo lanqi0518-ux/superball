@@ -1,4 +1,4 @@
-# SuperBall — Provably Fair 6/50 Draw
+# SuperBall — Provably Fair 1/50 Draw (every 3 minutes)
 
 A luxury draw front-end powered by [**drand**](https://drand.love/) (the
 League of Entropy public randomness beacon). Every winning combination is
@@ -19,11 +19,12 @@ can independently reproduce and verify the result.
 
 ## Draw algorithm
 
-1. Fetch beacon: `GET /public/<round>` → `{ signature }`.
+1. Every 3 minutes (locked to a drand round that lands on a 180-second
+   boundary from genesis; one every 6 drand rounds) fetch the beacon:
+   `GET /public/<round>` → `{ signature }`.
 2. `seed = SHA-256(signature)`.
-3. Fisher–Yates over `[1..50]` picking 6 numbers, using rejection sampling on
-   32-bit chunks of `SHA-256(seed || counter)` to avoid modulo bias.
-4. Sort ascending and display.
+3. Pick one uniform integer in `[1..50]` using rejection sampling on
+   32-bit chunks of `SHA-256(seed || counter)` (no modulo bias).
 
 The full logic lives in `src/lib/drand.ts` and is small enough to port to any
 language for independent verification.

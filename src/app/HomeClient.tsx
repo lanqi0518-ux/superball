@@ -5,17 +5,27 @@ import type { DrawResult } from "@/lib/drand";
 import HoldersSection from "./HoldersSection";
 
 const POOL = Array.from({ length: 50 }, (_, i) => i + 1);
-const PICK = 6;
+const PICK = 1;
 
 type BeaconMeta = {
   now: number;
+  beaconRound: number;
   currentRound: number;
   nextRound: number;
+  currentDrawAt: number;
   nextDrawAt: number;
-  period: number;
+  drawIntervalSeconds: number;
+  beaconPeriod: number;
   genesis: number;
   chainHash: string;
 };
+
+function formatCountdown(seconds: number): string {
+  if (seconds <= 0) return "settling…";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s.toString().padStart(2, "0")}s` : `${s}s`;
+}
 
 export default function HomeClient({
   initialDraw,
@@ -42,12 +52,11 @@ export default function HomeClient({
   };
 
   const quickPick = () => {
-    const pool = [...POOL];
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
+    const picks = new Set<number>();
+    while (picks.size < PICK) {
+      picks.add(1 + Math.floor(Math.random() * POOL.length));
     }
-    setSelected(pool.slice(0, PICK).sort((a, b) => a - b));
+    setSelected([...picks].sort((a, b) => a - b));
   };
 
   const clearAll = () => setSelected([]);
@@ -136,25 +145,25 @@ export default function HomeClient({
                 <span className="mono text-[color:var(--gold-bright)]">
                   #{draw?.round ?? "…"}
                 </span>
-                . A new round settles every 30 seconds.
+                . A new draw settles every 3 minutes.
               </p>
             </div>
           </div>
 
-          <div className="mt-8 flex flex-wrap items-center gap-4">
+          <div className="mt-8 flex flex-wrap items-center gap-6">
             {revealed.map((n) => (
               <DrawnBall
                 key={n}
                 n={n}
                 highlight={matches.has(n)}
-                size={64}
+                size={120}
               />
             ))}
             {Array.from({ length: placeholders }).map((_, i) => (
               <div
                 key={`ph-${i}`}
                 className="ball ball-idle opacity-40"
-                style={{ width: 64, height: 64, fontSize: 20 }}
+                style={{ width: 120, height: 120, fontSize: 44 }}
               >
                 ?
               </div>
@@ -164,21 +173,19 @@ export default function HomeClient({
           <div className="divider my-8" />
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <Stat label="Next round" value={meta ? `#${meta.nextRound}` : "…"} />
+            <Stat label="Next draw round" value={meta ? `#${meta.nextRound}` : "…"} />
             <Stat
               label="Countdown"
               value={
-                secondsToNext === null
-                  ? "…"
-                  : secondsToNext > 0
-                    ? `${secondsToNext}s`
-                    : "settling…"
+                secondsToNext === null ? "…" : formatCountdown(secondsToNext)
               }
               accent
             />
             <Stat
-              label="Beacon period"
-              value={meta ? `${meta.period}s` : "30s"}
+              label="Draw cadence"
+              value={
+                meta ? `${Math.round(meta.drawIntervalSeconds / 60)} min` : "3 min"
+              }
             />
           </div>
 
@@ -189,15 +196,23 @@ export default function HomeClient({
             <div>
               <div className="chip">Your Ticket</div>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-                Pick {PICK} of 50
+                Pick your number
               </h2>
               <p className="mt-1 text-sm text-white/60">
-                {selected.length}/{PICK} selected
+                Choose 1 number from 1–50
+                {selected.length > 0 && (
+                  <>
+                    {" · "}
+                    <span className="mono text-[color:var(--gold-bright)]">
+                      you picked {selected[0]}
+                    </span>
+                  </>
+                )}
                 {matches.size > 0 && (
                   <>
                     {" · "}
                     <span className="text-[color:var(--gold-bright)]">
-                      {matches.size} match{matches.size === 1 ? "" : "es"}
+                      winner!
                     </span>
                   </>
                 )}
@@ -274,7 +289,7 @@ function Header() {
         <div className="flex items-center gap-3">
           <Logo />
           <span className="mono text-[11px] uppercase tracking-[0.3em] text-white/50">
-            Superball · 6 / 50
+            Superball · 1 / 50 · every 3 min
           </span>
         </div>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
@@ -365,19 +380,19 @@ function ResultSummary({
   if (!draw) {
     return (
       <p className="text-sm text-white/50">
-        Waiting for the first beacon round…
+        Waiting for the first draw round…
       </p>
     );
   }
   if (selected.length === 0) {
     return (
       <p className="text-sm text-white/50">
-        Pick numbers above (or use Quick pick) to check them against round
+        Pick a number above (or use Quick pick) to check it against round
         <span className="mono text-[color:var(--gold-bright)]"> #{draw.round}</span>.
       </p>
     );
   }
-  const tier = tierFor(matches);
+  const won = matches > 0;
   return (
     <div className="flex items-center justify-between gap-4">
       <div>
@@ -385,7 +400,16 @@ function ResultSummary({
           Round #{draw.round} result
         </div>
         <div className="mt-1 text-lg font-semibold">
-          {matches} of {PICK} matched · <span className="gold-text">{tier}</span>
+          {won ? (
+            <span className="gold-text">Winner · you picked {selected[0]}</span>
+          ) : (
+            <>
+              No prize · winning number was{" "}
+              <span className="mono text-[color:var(--gold-bright)]">
+                {draw.numbers[0]}
+              </span>
+            </>
+          )}
         </div>
       </div>
       <div className="mono text-xs text-white/40">
@@ -393,14 +417,6 @@ function ResultSummary({
       </div>
     </div>
   );
-}
-
-function tierFor(m: number): string {
-  if (m === 6) return "Jackpot";
-  if (m === 5) return "Second tier";
-  if (m === 4) return "Third tier";
-  if (m === 3) return "Consolation";
-  return "No prize";
 }
 
 function FairnessSection({ draw }: { draw: DrawResult | null }) {
@@ -413,13 +429,13 @@ function FairnessSection({ draw }: { draw: DrawResult | null }) {
             How this draw is verifiable
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-white/60">
-            We do not roll the dice. Each round we pull the BLS threshold
+            We do not roll the dice. Every 3 minutes we pull the BLS threshold
             signature produced by the drand network — the same beacon that
             powers Filecoin leader election, League of Entropy consumers, and
             dozens of public randomness applications. From that signature we
-            deterministically derive 6 unbiased numbers from 1–50 with a
-            SHA-256-seeded Fisher–Yates shuffle and rejection sampling. Anyone
-            can reproduce the exact same numbers.
+            deterministically derive one unbiased winning number from 1–50
+            using a SHA-256-seeded rejection sample. Anyone can reproduce the
+            exact same number.
           </p>
         </div>
       </div>
@@ -437,8 +453,8 @@ function FairnessSection({ draw }: { draw: DrawResult | null }) {
         />
         <Step
           n="03"
-          title="Draw the balls"
-          body="Fisher–Yates over 1..50 using rejection sampling on SHA-256(seed || counter) — no modulo bias, uniform distribution guaranteed."
+          title="Draw the number"
+          body="One number from 1..50, chosen by rejection sampling on SHA-256(seed || counter) — no modulo bias, uniform distribution guaranteed."
         />
       </div>
 

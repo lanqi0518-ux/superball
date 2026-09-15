@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { deriveDraw, fetchBeacon, roundAt } from "@/lib/drand";
+import {
+  currentDrawRound,
+  deriveDraw,
+  fetchBeacon,
+  ROUNDS_PER_DRAW,
+} from "@/lib/drand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,19 +12,27 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const roundParam = url.searchParams.get("round");
-  const round = roundParam ? Number(roundParam) : undefined;
+  const now = Math.floor(Date.now() / 1000);
+  const currentRound = currentDrawRound(now);
+  let round = roundParam ? Number(roundParam) : currentRound;
 
-  if (round !== undefined) {
-    if (!Number.isInteger(round) || round < 1) {
-      return NextResponse.json({ error: "Invalid round" }, { status: 400 });
-    }
-    const nowRound = roundAt(Math.floor(Date.now() / 1000));
-    if (round > nowRound) {
-      return NextResponse.json(
-        { error: "Round has not been produced yet", currentRound: nowRound },
-        { status: 425 },
-      );
-    }
+  if (!Number.isInteger(round) || round < 1) {
+    return NextResponse.json({ error: "Invalid round" }, { status: 400 });
+  }
+  if ((round - 1) % ROUNDS_PER_DRAW !== 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Round is not aligned to the 3-minute draw cadence. Use a round from /api/beacon.",
+      },
+      { status: 400 },
+    );
+  }
+  if (round > currentRound) {
+    return NextResponse.json(
+      { error: "Draw round has not been produced yet", currentRound },
+      { status: 425 },
+    );
   }
 
   try {
