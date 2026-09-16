@@ -18,11 +18,47 @@ const EXAMPLE = `# address, percent   (each 0.1% = 1 auto-assigned number)
 0xFeed0000000000000000000000000000000000Fee, 0.4
 0xBeef0000000000000000000000000000000000Bee, 0.1`;
 
+type Snapshot = {
+  configured: boolean;
+  source?: string;
+  tokenAddress?: string;
+  symbol?: string;
+  totalSupplyFormatted?: string;
+  limit?: number;
+  fetchedAt?: number;
+  holders?: Holder[];
+  holdersText?: string;
+  error?: string;
+};
+
 export default function HoldersSection({ draw }: { draw: DrawResult | null }) {
   const [text, setText] = useState<string>(EXAMPLE);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [allocations, setAllocations] = useState<HolderAllocation[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await fetch("/api/holders", { cache: "no-store" });
+        const j = (await r.json()) as Snapshot;
+        if (!cancelled) {
+          setSnapshot(j);
+          if (j.configured && j.holdersText) setText(j.holdersText);
+        }
+      } catch {}
+    }
+    load();
+    const t = setInterval(load, 25_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  const isLive = Boolean(snapshot?.configured && !snapshot.error);
 
   const holders: Holder[] = useMemo(() => {
     try {
@@ -68,13 +104,31 @@ export default function HoldersSection({ draw }: { draw: DrawResult | null }) {
     <section className="panel p-6 md:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="chip">Token Holder Draw</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="chip">Token Holder Draw</div>
+            <div
+              className={`chip ${
+                isLive
+                  ? "border-emerald-400/40 text-emerald-300"
+                  : "border-amber-400/40 text-amber-300"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isLive ? "bg-emerald-400" : "bg-amber-400"
+                }`}
+              />
+              {isLive
+                ? `live on-chain snapshot · top ${snapshot?.limit ?? 100}`
+                : "manual list (no token contract configured)"}
+            </div>
+          </div>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight">
             Auto-assign numbers to your token holders
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-white/60">
-            Every <span className="mono text-[color:var(--gold-bright)]">0.1%</span> of
-            supply held earns one auto-assigned number from 1–50. A wallet
+            Every <span className="mono text-[color:var(--gold-bright)]">0.1%</span>{" "}
+            of supply held earns one auto-assigned number from 1–50. A wallet
             holding 1% gets 10 numbers, 10% gets 100 numbers, and so on. The
             assignment is deterministic and re-derived each round from the
             drand signature — anyone can independently verify which numbers
@@ -84,6 +138,27 @@ export default function HoldersSection({ draw }: { draw: DrawResult | null }) {
             </span>
             .
           </p>
+          {isLive && snapshot?.tokenAddress && (
+            <p className="mono mt-2 text-[11px] text-white/40">
+              token {snapshot.tokenAddress} · supply{" "}
+              {snapshot.totalSupplyFormatted} {snapshot.symbol}
+              {snapshot.fetchedAt && (
+                <>
+                  {" "}· snapshot age{" "}
+                  {Math.max(
+                    0,
+                    Math.floor(Date.now() / 1000) - snapshot.fetchedAt,
+                  )}
+                  s
+                </>
+              )}
+            </p>
+          )}
+          {snapshot?.error && (
+            <p className="mt-2 text-xs text-red-300">
+              Snapshot error: {snapshot.error}
+            </p>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1 text-right text-xs text-white/50">
           <span>
@@ -106,27 +181,32 @@ export default function HoldersSection({ draw }: { draw: DrawResult | null }) {
       <div className="mt-5 grid gap-6 md:grid-cols-[1fr_1.4fr]">
         <div>
           <label className="text-[10px] uppercase tracking-[0.18em] text-white/40">
-            Holder list
+            {isLive ? "Live holder snapshot" : "Holder list"}
           </label>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             spellCheck={false}
-            className="mono mt-2 h-72 w-full rounded-xl border border-[color:var(--panel-border)] bg-black/50 p-3 text-xs leading-relaxed text-white/80 outline-none focus:border-[color:var(--gold)]"
+            readOnly={isLive}
+            className={`mono mt-2 h-72 w-full rounded-xl border border-[color:var(--panel-border)] bg-black/50 p-3 text-xs leading-relaxed text-white/80 outline-none ${
+              isLive ? "cursor-default" : "focus:border-[color:var(--gold)]"
+            }`}
           />
           {error && (
             <p className="mt-2 text-xs text-red-300">Parse error: {error}</p>
           )}
           <p className="mt-2 text-xs text-white/40">
-            Accepts <code className="mono">address,percent</code> per line, or
-            a JSON array <code className="mono">[{`{address,percent}`}]</code>.
+            {isLive
+              ? "Auto-refreshed every 25s from Blockscout. Set POOL_HOLDER_TOKEN_ADDRESS='' to switch back to manual."
+              : "Accepts address,percent per line, or a JSON array [{address,percent}]. Set POOL_HOLDER_TOKEN_ADDRESS to auto-snapshot from chain."}
           </p>
         </div>
 
         <div>
           <div className="flex items-center justify-between">
             <label className="text-[10px] uppercase tracking-[0.18em] text-white/40">
-              Allocation & matches — round #{draw?.displayedRound ?? draw?.round ?? "…"}
+              Allocation & matches — round #
+              {draw?.displayedRound ?? draw?.round ?? "…"}
             </label>
             {busy && (
               <span className="mono text-[10px] text-white/40">computing…</span>
@@ -136,7 +216,9 @@ export default function HoldersSection({ draw }: { draw: DrawResult | null }) {
           <div className="mt-2 max-h-72 space-y-2 overflow-y-auto pr-1">
             {allocations.length === 0 && (
               <p className="text-sm text-white/50">
-                Paste holders on the left to see auto-assigned numbers.
+                {isLive
+                  ? "Waiting for the first snapshot…"
+                  : "Paste holders on the left to see auto-assigned numbers."}
               </p>
             )}
             {allocations.map((a) => (

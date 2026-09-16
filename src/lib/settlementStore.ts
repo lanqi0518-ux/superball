@@ -20,6 +20,8 @@ export type Settlement = {
   }[];
   settledAt: number;
   auto: boolean;
+  holderSource?: string;
+  holderCount?: number;
 };
 
 const STORE_PATH = process.env.SETTLEMENT_STORE_PATH ?? "/tmp/superball-settlements.json";

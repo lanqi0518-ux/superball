@@ -13,7 +13,8 @@ import {
   readPoolBalance,
   type Payout,
 } from "@/lib/chain";
-import { allocateAll, parseHolders } from "@/lib/holders";
+import { allocateAll, parseHolders, type Holder } from "@/lib/holders";
+import { getSnapshotCached, loadSnapshotConfig } from "@/lib/tokenHolders";
 import {
   has,
   list,
@@ -51,11 +52,38 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => ({}))) as { holders?: string };
-  const holdersText = body.holders ?? process.env.POOL_HOLDERS ?? "";
-  const holders = parseHolders(holdersText);
+
+  let holders: Holder[] = [];
+  let holderSource = "manual";
+  const snap = loadSnapshotConfig();
+  if (body.holders) {
+    holders = parseHolders(body.holders);
+    holderSource = "request";
+  } else if (snap) {
+    try {
+      const snapshot = await getSnapshotCached(snap);
+      holders = snapshot.holders;
+      holderSource = "onchain-snapshot";
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error:
+            "On-chain snapshot failed: " +
+            (err instanceof Error ? err.message : "unknown"),
+        },
+        { status: 502 },
+      );
+    }
+  } else {
+    holders = parseHolders(process.env.POOL_HOLDERS ?? "");
+    holderSource = "POOL_HOLDERS";
+  }
   if (holders.length === 0) {
     return NextResponse.json(
-      { error: "No holders provided (body.holders or POOL_HOLDERS)" },
+      {
+        error:
+          "No holders available. Set POOL_HOLDER_TOKEN_ADDRESS for auto-snapshot, or POOL_HOLDERS, or pass body.holders.",
+      },
       { status: 400 },
     );
   }
@@ -124,6 +152,8 @@ export async function POST(req: Request) {
     payouts: serializePayouts(paid, slotsByAddress),
     settledAt: Math.floor(Date.now() / 1000),
     auto: true,
+    holderSource,
+    holderCount: holders.length,
   };
   await record(settlement);
 
