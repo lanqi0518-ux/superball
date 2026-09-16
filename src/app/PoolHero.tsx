@@ -146,32 +146,38 @@ export default function PoolHero({
               className="gold-text font-black leading-none tracking-tight"
               style={{ fontSize: "clamp(56px, 12vw, 160px)" }}
             >
-              {info?.configured
-                ? formatNumber(distNum)
+              {info?.configured && distUsd
+                ? distUsd
                 : info == null
                   ? "…"
                   : "—"}
             </div>
             <div className="pb-2 text-2xl font-semibold text-white/70">
-              {info?.symbol ?? "ETH"}
+              USD
             </div>
           </div>
-          {distUsd && (
-            <div className="mt-2 flex flex-wrap items-baseline gap-3 text-lg text-white/50">
-              <span>
-                ≈ <span className="text-white/80">{distUsd}</span> USD
+          <div className="mt-2 flex flex-wrap items-baseline gap-3 text-lg text-white/50">
+            <span>
+              ≈{" "}
+              <span className="text-white/80">
+                {info?.configured
+                  ? formatNumber(distNum)
+                  : info == null
+                    ? "…"
+                    : "—"}
+              </span>{" "}
+              {info?.symbol ?? "ETH"}
+            </span>
+            {info?.usdPrice != null && info.symbol && (
+              <span className="mono text-xs text-white/40">
+                1 {info.symbol} ={" "}
+                {info.usdPrice.toLocaleString(undefined, {
+                  maximumFractionDigits: info.usdPrice < 1 ? 6 : 2,
+                })}{" "}
+                USD
               </span>
-              {info?.usdPrice != null && info.symbol && (
-                <span className="mono text-xs text-white/40">
-                  1 {info.symbol} ={" "}
-                  {info.usdPrice.toLocaleString(undefined, {
-                    maximumFractionDigits: info.usdPrice < 1 ? 6 : 2,
-                  })}{" "}
-                  USD
-                </span>
-              )}
-            </div>
-          )}
+            )}
+          </div>
           {info?.configured && info.balance && (
             <div className="mono mt-3 text-xs text-white/40">
               Wallet balance{" "}
