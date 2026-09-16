@@ -54,6 +54,37 @@ export async function GET(req: Request) {
     ]),
     chainCfg,
   };
+  const raw = url.searchParams.get("raw") === "1";
+  if (raw) {
+    const target = `${explorerBase.replace(/\/$/, "")}/api/v2/tokens/${tokenAddress}/holders?limit=5`;
+    try {
+      const t0 = Date.now();
+      const res = await fetch(target, {
+        headers: {
+          accept: "application/json",
+          "user-agent":
+            "Mozilla/5.0 (compatible; SuperBallDraw/1.0; +https://superball-draw.fly.dev)",
+        },
+        cache: "no-store",
+      });
+      const bodyText = await res.text();
+      return NextResponse.json({
+        ok: res.ok,
+        url: target,
+        status: res.status,
+        ms: Date.now() - t0,
+        headers: Object.fromEntries(res.headers),
+        bodyPreview: bodyText.slice(0, 400),
+      });
+    } catch (err) {
+      return NextResponse.json({
+        ok: false,
+        url: target,
+        error: err instanceof Error ? err.message : "error",
+      });
+    }
+  }
+
   try {
     const data = await fetchSnapshotHolders(snap);
     return NextResponse.json({
