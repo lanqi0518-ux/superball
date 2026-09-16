@@ -129,10 +129,11 @@ export default function HoldersSection({ draw }: { draw: DrawResult | null }) {
           <p className="mt-2 max-w-2xl text-sm text-white/60">
             Every <span className="mono text-[color:var(--gold-bright)]">0.1%</span>{" "}
             of supply held earns one auto-assigned number from 1–50. A wallet
-            holding 1% gets 10 numbers, 10% gets 100 numbers, and so on. The
-            assignment is deterministic and re-derived each round from the
-            drand signature — anyone can independently verify which numbers
-            each address was assigned for round{" "}
+            holding 0.2% gets 2 <em className="not-italic text-white/80">distinct</em>{" "}
+            numbers, 1% gets 10, 10% gets 100 (with wrap-around after 50). The
+            numbers <span className="text-[color:var(--gold-bright)]">re-shuffle every 3 minutes</span>{" "}
+            from the new drand signature — anyone can independently verify each
+            address&apos;s allocation for round{" "}
             <span className="mono text-[color:var(--gold-bright)]">
               #{draw?.displayedRound ?? draw?.round ?? "…"}
             </span>

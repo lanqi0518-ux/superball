@@ -51,10 +51,47 @@ function concat(...parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-// Deterministic, verifiable allocation:
-//   number(holder, i) = 1 + (SHA-256(seed || address || u32(i))[:4] as u32) mod 50
-// where seed = SHA-256(drand_signature). Anyone can reproduce it in any
-// language from (round, holder-address, slot-index).
+// Deterministic uniform uint32 stream from (seed, counter).
+async function nextUint32(
+  seed: Uint8Array,
+  counter: number,
+): Promise<{ value: number; nextCounter: number }> {
+  const material = new Uint8Array(seed.length + 4);
+  material.set(seed, 0);
+  material.set(u32BE(counter), seed.length);
+  const digest = await sha256(material);
+  const view = new DataView(
+    digest.buffer,
+    digest.byteOffset,
+    digest.byteLength,
+  );
+  return { value: view.getUint32(0, false) >>> 0, nextCounter: counter + 1 };
+}
+
+// Unbiased bounded integer using rejection sampling.
+async function boundedInt(
+  seed: Uint8Array,
+  counter: number,
+  bound: number,
+): Promise<{ value: number; nextCounter: number }> {
+  const limit = Math.floor(0x100000000 / bound) * bound;
+  let c = counter;
+  while (true) {
+    const { value, nextCounter } = await nextUint32(seed, c);
+    c = nextCounter;
+    if (value < limit) return { value: value % bound, nextCounter: c };
+  }
+}
+
+// Deterministic, verifiable per-holder allocation:
+//   subSeed(k) = SHA-256(SHA-256(drand_signature) || address || u32BE(k))
+//   permutation(k) = Fisher-Yates over [1..50] driven by subSeed(k)
+//   numbers = concat(permutation(0), permutation(1), ...) sliced to `slots`
+//
+// Because each permutation is a shuffle of the full 1..50 pool, the first
+// min(slots, 50) numbers are guaranteed unique. Beyond 50 slots a fresh
+// permutation begins (some numbers necessarily repeat because the pool only
+// has 50 balls). Anyone can reproduce this in any language.
 export async function allocateForHolder(
   signatureHex: string,
   address: string,
@@ -64,15 +101,25 @@ export async function allocateForHolder(
   const seed = await sha256(hexToBytes(signatureHex));
   const addrBytes = encodeUtf8(address.toLowerCase());
   const numbers: number[] = [];
-  for (let i = 0; i < slots; i++) {
-    const digest = await sha256(concat(seed, addrBytes, u32BE(i)));
-    const view = new DataView(
-      digest.buffer,
-      digest.byteOffset,
-      digest.byteLength,
-    );
-    const raw = view.getUint32(0, false) >>> 0;
-    numbers.push(1 + (raw % poolSize));
+  let permIndex = 0;
+  while (numbers.length < slots) {
+    const subSeed = await sha256(concat(seed, addrBytes, u32BE(permIndex)));
+    const pool = Array.from({ length: poolSize }, (_, i) => i + 1);
+    let counter = 0;
+    for (let i = pool.length - 1; i > 0; i--) {
+      const { value: j, nextCounter } = await boundedInt(
+        subSeed,
+        counter,
+        i + 1,
+      );
+      counter = nextCounter;
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    for (const n of pool) {
+      if (numbers.length >= slots) break;
+      numbers.push(n);
+    }
+    permIndex++;
   }
   return numbers;
 }
