@@ -150,35 +150,47 @@ export default function HomeClient({
 
 function Header() {
   return (
-    <header className="flex flex-col gap-4 pt-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <div className="flex items-center gap-3">
-          <Logo />
-          <span className="mono text-[11px] uppercase tracking-[0.3em] text-white/50">
-            Superball · 1 / 50 · every 3 min
+    <header className="flex flex-col gap-6 pt-2">
+      {/* Full-width 3:1 banner */}
+      <div className="relative overflow-hidden rounded-3xl border border-[color:var(--panel-border)] shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+        <picture>
+          <source media="(max-width: 640px)" srcSet="/header-small.png" />
+          <img
+            src="/header.png"
+            alt="SuperBall — Provably fair 1/50 draw, every 3 minutes"
+            width={1500}
+            height={500}
+            className="block w-full h-auto"
+          />
+        </picture>
+      </div>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <Logo />
+            <span className="mono text-[11px] uppercase tracking-[0.3em] text-white/50">
+              Superball · 1 / 50 · every 3 min
+            </span>
+          </div>
+          <p className="mt-3 max-w-2xl text-sm text-white/60 sm:text-base">
+            Every 3 minutes the drand League of Entropy beacon produces one
+            winning number from 1–50 and re-assigns numbers to every token
+            holder. Each 0.1% of supply held earns one auto-assigned number —
+            a wallet with 1% gets 10 numbers, 10% gets 100. Anyone can
+            independently reproduce both the winning number and each
+            holder&apos;s allocation from the round signature alone.
+          </p>
+        </div>
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <div className="chip">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+            Beacon live
+          </div>
+          <span className="mono text-[11px] text-white/40">
+            chain 8990e7…1b2ce
           </span>
         </div>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
-          <span className="gold-text">Provably fair</span> draws,
-          <br className="hidden sm:block" /> assigned to your holders.
-        </h1>
-        <p className="mt-3 max-w-2xl text-sm text-white/60 sm:text-base">
-          Every 3 minutes the drand League of Entropy beacon produces one
-          winning number from 1–50 and re-assigns numbers to every token
-          holder. Each 0.1% of supply held earns one auto-assigned number — a
-          wallet with 1% gets 10 numbers, 10% gets 100. Anyone can
-          independently reproduce both the winning number and each holder's
-          allocation from the round signature alone.
-        </p>
-      </div>
-      <div className="flex flex-col items-start gap-2 sm:items-end">
-        <div className="chip">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-          Beacon live
-        </div>
-        <span className="mono text-[11px] text-white/40">
-          chain 8990e7…1b2ce
-        </span>
       </div>
     </header>
   );
@@ -186,9 +198,13 @@ function Header() {
 
 function Logo() {
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--panel-border)] bg-gradient-to-br from-[#f4d377] to-[#8a6522] shadow-[0_6px_20px_rgba(212,178,106,0.35)]">
-      <span className="text-lg font-black text-[#1a1200]">S</span>
-    </div>
+    <img
+      src="/logo-192.png"
+      alt="SuperBall"
+      width={44}
+      height={44}
+      className="h-11 w-11 rounded-full shadow-[0_6px_20px_rgba(212,178,106,0.35)]"
+    />
   );
 }
 
