@@ -2,9 +2,12 @@ name: Auto settle draws every 3 minutes
 
 # GitHub Actions crons have a 5-minute minimum granularity, but we need to
 # fire every 3 minutes. Workaround: schedule every 5 minutes, and inside the
-# job loop `curl POST` every 30s for ~4 minutes. /api/settle is idempotent
-# per drand round (returns {skipped:true} on repeats) so over-firing is safe
-# and guarantees we never miss a 3-minute boundary.
+# job loop `curl POST` every 30s for 5m30s so each run OVERLAPS the next
+# scheduled start (with concurrency:cancel-in-progress:false, the next run
+# just queues behind us). Result: continuous 30-second heartbeat, no gaps.
+# /api/settle is idempotent per drand round (returns {skipped:true} on
+# repeats) so over-firing is safe and guarantees we never miss a 3-minute
+# boundary — even if GitHub delays the cron by up to 5 minutes.
 
 on:
   schedule:
@@ -18,9 +21,9 @@ concurrency:
 jobs:
   settle:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 7
     steps:
-      - name: Poke /api/settle every 30s for ~4 minutes
+      - name: Poke /api/settle every 30s for 5m30s (overlaps next scheduled run)
         env:
           SETTLE_SECRET: ${{ secrets.SETTLE_SECRET }}
           SETTLE_URL: https://superball-draw.fly.dev/api/settle
@@ -29,7 +32,7 @@ jobs:
             echo "::error::SETTLE_SECRET repo secret is not set"
             exit 1
           fi
-          END=$(( SECONDS + 240 ))
+          END=$(( SECONDS + 330 ))
           COUNT=0
           while [ $SECONDS -lt $END ]; do
             COUNT=$((COUNT+1))
