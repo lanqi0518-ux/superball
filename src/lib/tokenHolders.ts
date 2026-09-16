@@ -83,7 +83,11 @@ export async function fetchSnapshotHolders(
 
   const url = `${snap.explorerBase}/api/v2/tokens/${snap.tokenAddress}/holders?limit=${snap.limit}`;
   const res = await fetch(url, {
-    headers: { accept: "application/json" },
+    headers: {
+      accept: "application/json",
+      "user-agent":
+        "Mozilla/5.0 (compatible; SuperBallDraw/1.0; +https://superball-draw.fly.dev)",
+    },
     cache: "no-store",
   });
   if (!res.ok) {
