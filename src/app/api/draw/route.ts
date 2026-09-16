@@ -38,9 +38,11 @@ export async function GET(req: Request) {
   try {
     const beacon = await fetchBeacon(round);
     const draw = await deriveDraw(beacon);
-    return NextResponse.json(draw, {
-      headers: { "Cache-Control": "public, max-age=15" },
-    });
+    const offset = Number(process.env.POOL_ROUND_OFFSET ?? "0");
+    return NextResponse.json(
+      { ...draw, displayedRound: Math.max(0, draw.round - offset) },
+      { headers: { "Cache-Control": "public, max-age=15" } },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     return NextResponse.json({ error: message }, { status: 502 });

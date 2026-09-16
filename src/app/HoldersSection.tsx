@@ -80,7 +80,7 @@ export default function HoldersSection({ draw }: { draw: DrawResult | null }) {
             drand signature — anyone can independently verify which numbers
             each address was assigned for round{" "}
             <span className="mono text-[color:var(--gold-bright)]">
-              #{draw?.round ?? "…"}
+              #{draw?.displayedRound ?? draw?.round ?? "…"}
             </span>
             .
           </p>
@@ -126,7 +126,7 @@ export default function HoldersSection({ draw }: { draw: DrawResult | null }) {
         <div>
           <div className="flex items-center justify-between">
             <label className="text-[10px] uppercase tracking-[0.18em] text-white/40">
-              Allocation & matches — round #{draw?.round ?? "…"}
+              Allocation & matches — round #{draw?.displayedRound ?? draw?.round ?? "…"}
             </label>
             {busy && (
               <span className="mono text-[10px] text-white/40">computing…</span>

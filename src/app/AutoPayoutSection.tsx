@@ -98,7 +98,7 @@ export default function AutoPayoutSection() {
             ? "armed · hot wallet loaded"
             : configured
               ? "read-only (no private key)"
-              : "not configured (demo mode)"}
+              : "not configured"}
         </div>
       </div>
 

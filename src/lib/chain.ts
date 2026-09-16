@@ -3,73 +3,108 @@ import {
   createWalletClient,
   http,
   parseAbi,
+  parseEther,
+  formatEther,
   formatUnits,
+  defineChain,
   type Hex,
   type Address,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import * as chains from "viem/chains";
 
+// ---- Robinhood Chain (viem doesn't ship this yet) ------------------------
+const robinhoodMainnet = defineChain({
+  id: 4663,
+  name: "Robinhood Chain",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["https://rpc.mainnet.chain.robinhood.com"] },
+  },
+  blockExplorers: {
+    default: {
+      name: "Blockscout",
+      url: "https://robinhoodchain.blockscout.com",
+    },
+  },
+});
+
+const CUSTOM_CHAINS = [robinhoodMainnet];
+
 // ---- Config from env ------------------------------------------------------
 
 export type ChainConfig = {
   chainId: number;
   rpcUrl: string;
-  tokenAddress: Address;
+  native: boolean;
+  tokenAddress?: Address;
   walletAddress: Address;
   privateKey?: Hex;
   tokenSymbol: string;
   tokenDecimals: number;
-  payoutBpsPerRound: number; // basis points of pool paid per round (e.g. 100 = 1%)
+  payoutBps: number; // basis points of distributable pool paid per round
+  gasReserveWei: bigint;
   usdPricePerToken?: number;
   configured: boolean;
   keyLoaded: boolean;
+  explorerUrl?: string;
 };
 
 export function loadConfig(): ChainConfig {
   const chainId = Number(process.env.POOL_CHAIN_ID ?? "0");
   const rpcUrl = process.env.POOL_RPC_URL ?? "";
-  const tokenAddress = (process.env.POOL_TOKEN_ADDRESS ?? "") as Address;
+  const native = (process.env.POOL_NATIVE ?? "false").toLowerCase() === "true";
+  const tokenAddress = (process.env.POOL_TOKEN_ADDRESS || undefined) as
+    | Address
+    | undefined;
   const walletAddress = (process.env.POOL_WALLET_ADDRESS ?? "") as Address;
   const privateKey = process.env.POOL_WALLET_PRIVATE_KEY as Hex | undefined;
-  const tokenSymbol = process.env.POOL_TOKEN_SYMBOL ?? "TOKEN";
+  const tokenSymbol = process.env.POOL_TOKEN_SYMBOL ?? (native ? "ETH" : "TOKEN");
   const tokenDecimals = Number(process.env.POOL_TOKEN_DECIMALS ?? "18");
-  const payoutBpsPerRound = Number(process.env.POOL_PAYOUT_BPS ?? "100"); // default 1%
+  const payoutBps = Number(process.env.POOL_PAYOUT_BPS ?? "10000"); // default 100%
+  const gasReserveEth = process.env.POOL_GAS_RESERVE ?? "0";
+  const gasReserveWei = parseEther(gasReserveEth as `${number}`);
   const usdPricePerToken = process.env.POOL_USD_PRICE
     ? Number(process.env.POOL_USD_PRICE)
     : undefined;
+  const explorerUrl = process.env.POOL_EXPLORER_URL;
 
   const configured = Boolean(
-    chainId && rpcUrl && tokenAddress && walletAddress,
+    chainId && rpcUrl && walletAddress && (native || tokenAddress),
   );
 
   return {
     chainId,
     rpcUrl,
+    native,
     tokenAddress,
     walletAddress,
     privateKey,
     tokenSymbol,
     tokenDecimals,
-    payoutBpsPerRound,
+    payoutBps,
+    gasReserveWei,
     usdPricePerToken,
     configured,
     keyLoaded: Boolean(privateKey),
+    explorerUrl,
   };
 }
 
 function pickChain(chainId: number) {
+  const custom = CUSTOM_CHAINS.find((c) => c.id === chainId);
+  if (custom) return custom;
   const found = Object.values(chains).find(
     (c): c is (typeof chains)[keyof typeof chains] =>
       typeof c === "object" && c !== null && "id" in c && c.id === chainId,
   );
   if (found) return found;
-  return {
+  return defineChain({
     id: chainId,
     name: `chain-${chainId}`,
     nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
     rpcUrls: { default: { http: [] } },
-  } as const;
+  });
 }
 
 // ---- ERC-20 helpers -------------------------------------------------------
@@ -100,12 +135,20 @@ export function walletClient(cfg: ChainConfig) {
 
 export async function readPoolBalance(cfg: ChainConfig): Promise<bigint> {
   const client = publicClient(cfg);
+  if (cfg.native) {
+    return client.getBalance({ address: cfg.walletAddress });
+  }
   return (await client.readContract({
-    address: cfg.tokenAddress,
+    address: cfg.tokenAddress!,
     abi: ERC20_ABI,
     functionName: "balanceOf",
     args: [cfg.walletAddress],
   })) as bigint;
+}
+
+export function distributable(balance: bigint, cfg: ChainConfig): bigint {
+  if (!cfg.native) return balance;
+  return balance > cfg.gasReserveWei ? balance - cfg.gasReserveWei : 0n;
 }
 
 export type Payout = { to: Address; amount: bigint; txHash?: Hex };
@@ -114,7 +157,7 @@ export async function payWinners(
   cfg: ChainConfig,
   payouts: Payout[],
 ): Promise<Payout[]> {
-  const client = walletClient(cfg);
+  const wc = walletClient(cfg);
   const pub = publicClient(cfg);
   const out: Payout[] = [];
   for (const p of payouts) {
@@ -122,18 +165,40 @@ export async function payWinners(
       out.push(p);
       continue;
     }
-    const hash = await client.writeContract({
-      address: cfg.tokenAddress,
-      abi: ERC20_ABI,
-      functionName: "transfer",
-      args: [p.to, p.amount],
-    });
+    let hash: Hex;
+    if (cfg.native) {
+      hash = await wc.sendTransaction({ to: p.to, value: p.amount });
+    } else {
+      hash = await wc.writeContract({
+        address: cfg.tokenAddress!,
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [p.to, p.amount],
+      });
+    }
     await pub.waitForTransactionReceipt({ hash });
     out.push({ ...p, txHash: hash });
   }
   return out;
 }
 
-export function formatToken(amount: bigint, cfg: ChainConfig): string {
+export function formatAmount(amount: bigint, cfg: ChainConfig): string {
+  if (cfg.native) return formatEther(amount);
   return formatUnits(amount, cfg.tokenDecimals);
+}
+
+export function explorerTx(cfg: ChainConfig, hash: string): string {
+  const base =
+    cfg.explorerUrl ??
+    (cfg.chainId === 4663 ? "https://robinhoodchain.blockscout.com" : "");
+  if (!base) return "";
+  return `${base.replace(/\/$/, "")}/tx/${hash}`;
+}
+
+export function explorerAddress(cfg: ChainConfig, addr: string): string {
+  const base =
+    cfg.explorerUrl ??
+    (cfg.chainId === 4663 ? "https://robinhoodchain.blockscout.com" : "");
+  if (!base) return "";
+  return `${base.replace(/\/$/, "")}/address/${addr}`;
 }

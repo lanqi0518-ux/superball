@@ -11,6 +11,9 @@ type BeaconMeta = {
   beaconRound: number;
   currentRound: number;
   nextRound: number;
+  displayedCurrentRound: number;
+  displayedNextRound: number;
+  roundOffset: number;
   currentDrawAt: number;
   nextDrawAt: number;
   drawIntervalSeconds: number;
@@ -106,13 +109,17 @@ export default function HomeClient({
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Round" value={draw ? `#${draw.round}` : "…"} />
         <Stat
-          label="Next draw round"
-          value={meta ? `#${meta.nextRound}` : "…"}
+          label="Current round"
+          value={meta ? `#${meta.displayedCurrentRound}` : "…"}
         />
         <Stat
-          label="Beacon"
+          label="Next round"
+          value={meta ? `#${meta.displayedNextRound}` : "…"}
+          accent
+        />
+        <Stat
+          label="drand beacon"
           value={meta ? `#${meta.beaconRound}` : "…"}
         />
       </div>
@@ -253,7 +260,7 @@ function FairnessSection({ draw }: { draw: DrawResult | null }) {
         <div className="mt-6 rounded-xl border border-[color:var(--panel-border)] bg-black/40 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/50">
             <span className="uppercase tracking-[0.18em]">
-              Round #{draw.round} signature
+              Round #{draw.displayedRound ?? draw.round} · drand #{draw.round} signature
             </span>
             <a
               href={`https://api.drand.sh/public/${draw.round}`}
@@ -300,7 +307,9 @@ function HistorySection({ history }: { history: DrawResult[] }) {
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3"
           >
             <div className="flex items-center gap-3">
-              <span className="mono text-xs text-white/50">#{d.round}</span>
+              <span className="mono text-xs text-white/50">
+                #{d.displayedRound ?? d.round}
+              </span>
               <span className="mono text-xs text-white/40">
                 {new Date(d.drawnAt * 1000).toLocaleTimeString()}
               </span>

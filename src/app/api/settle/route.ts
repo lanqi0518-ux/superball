@@ -7,6 +7,7 @@ import {
   fetchBeacon,
 } from "@/lib/drand";
 import {
+  distributable,
   loadConfig,
   payWinners,
   readPoolBalance,
@@ -23,14 +24,12 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET  /api/settle          → list past settlements
-// POST /api/settle          → settle the current draw round (idempotent per round).
-//   Auth: Authorization: Bearer <SETTLE_SECRET>
-//   Body (optional): { holders: "address,percent\n..." }
-//   If body omitted, POOL_HOLDERS env var is used.
+function offset(): number {
+  return Number(process.env.POOL_ROUND_OFFSET ?? "0");
+}
 
 export async function GET() {
-  return NextResponse.json({ settlements: list().slice(0, 20) });
+  return NextResponse.json({ settlements: (await list()).slice(0, 20) });
 }
 
 export async function POST(req: Request) {
@@ -45,15 +44,13 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Chain not fully configured. Need POOL_CHAIN_ID, POOL_RPC_URL, POOL_TOKEN_ADDRESS, POOL_WALLET_ADDRESS, POOL_WALLET_PRIVATE_KEY.",
+          "Chain not fully configured. Need POOL_CHAIN_ID, POOL_RPC_URL, POOL_WALLET_ADDRESS, POOL_WALLET_PRIVATE_KEY (and POOL_TOKEN_ADDRESS if not native).",
       },
       { status: 400 },
     );
   }
 
-  const body = (await req
-    .json()
-    .catch(() => ({}))) as { holders?: string };
+  const body = (await req.json().catch(() => ({}))) as { holders?: string };
   const holdersText = body.holders ?? process.env.POOL_HOLDERS ?? "";
   const holders = parseHolders(holdersText);
   if (holders.length === 0) {
@@ -64,7 +61,7 @@ export async function POST(req: Request) {
   }
 
   const round = currentDrawRound(Math.floor(Date.now() / 1000));
-  if (has(round)) {
+  if (await has(round)) {
     return NextResponse.json({
       skipped: true,
       reason: "already settled",
@@ -74,7 +71,6 @@ export async function POST(req: Request) {
 
   const beacon = await fetchBeacon(round);
   const draw = await deriveDraw(beacon);
-  const winning = new Set(draw.numbers);
   const winningNumber = draw.numbers[0];
 
   const allocations = await allocateAll(
@@ -83,30 +79,33 @@ export async function POST(req: Request) {
     draw.numbers,
   );
 
-  const totalWinningSlots = allocations.reduce((n, a) => n + a.matches, 0);
-  const pool = await readPoolBalance(cfg);
-  const roundPool = (pool * BigInt(cfg.payoutBpsPerRound)) / 10_000n;
+  // Winners = unique addresses with at least one matching slot.
+  const winners: { address: Address; slots: number; winning: number }[] = [];
+  for (const a of allocations) {
+    if (a.matches === 0) continue;
+    try {
+      const to = getAddress(a.address);
+      winners.push({ address: to, slots: a.slots, winning: a.matches });
+    } catch {}
+  }
 
+  const totalBalance = await readPoolBalance(cfg);
+  const dist = distributable(totalBalance, cfg);
+  const roundPool = (dist * BigInt(cfg.payoutBps)) / 10_000n;
+
+  const payouts: Payout[] = [];
   const slotsByAddress: Record<
     string,
     { slots: number; winning: number }
   > = {};
-  const payouts: Payout[] = [];
-  if (totalWinningSlots > 0 && roundPool > 0n) {
-    for (const a of allocations) {
-      if (a.matches === 0) continue;
-      let to: Address;
-      try {
-        to = getAddress(a.address);
-      } catch {
-        continue;
-      }
-      const amount =
-        (roundPool * BigInt(a.matches)) / BigInt(totalWinningSlots);
-      payouts.push({ to, amount });
-      slotsByAddress[to.toLowerCase()] = {
-        slots: a.slots,
-        winning: a.matches,
+  if (winners.length > 0 && roundPool > 0n) {
+    // Split evenly per winning address.
+    const per = roundPool / BigInt(winners.length);
+    for (const w of winners) {
+      payouts.push({ to: w.address, amount: per });
+      slotsByAddress[w.address.toLowerCase()] = {
+        slots: w.slots,
+        winning: w.winning,
       };
     }
   }
@@ -116,15 +115,17 @@ export async function POST(req: Request) {
 
   const settlement = {
     round,
+    displayedRound: round - offset(),
     signature: draw.signature,
     winningNumber,
-    totalPool: pool.toString(),
+    totalBalance: totalBalance.toString(),
+    distributable: dist.toString(),
     paidTotal: paidTotal.toString(),
     payouts: serializePayouts(paid, slotsByAddress),
     settledAt: Math.floor(Date.now() / 1000),
     auto: true,
   };
-  record(settlement);
+  await record(settlement);
 
   return NextResponse.json({ ok: true, settlement });
 }

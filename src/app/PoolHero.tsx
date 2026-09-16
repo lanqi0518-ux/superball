@@ -4,30 +4,42 @@ import { useEffect, useState } from "react";
 
 type PoolInfo = {
   configured: boolean;
-  demo?: boolean;
   autoPayout?: boolean;
   symbol: string;
-  balance: string;
-  usdValue: number | null;
+  native?: boolean;
+  balance?: string;
+  distributable?: string;
+  reserve?: string;
+  usdValue?: number | null;
+  distributableUsd?: number | null;
   walletAddress: string | null;
-  payoutBps: number;
+  walletExplorer?: string;
   chainId?: number;
-  tokenAddress?: string;
+  tokenAddress?: string | null;
+  payoutBps: number;
+  error?: string;
 };
 
-function formatNumber(n: number): string {
+function formatNumber(n: number, maxFraction = 6): string {
   if (!isFinite(n)) return "—";
   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + "B";
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
   if (n >= 1_000) return (n / 1_000).toFixed(2) + "K";
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return n.toLocaleString(undefined, { maximumFractionDigits: maxFraction });
 }
 
-function formatUsd(n: number | null): string | null {
+function formatUsd(n: number | null | undefined): string | null {
   if (n == null || !isFinite(n)) return null;
   if (n >= 1_000_000) return "$" + (n / 1_000_000).toFixed(2) + "M";
   if (n >= 1_000) return "$" + (n / 1_000).toFixed(2) + "K";
   return "$" + n.toFixed(2);
+}
+
+function shortAddr(a: string): string {
+  if (!a) return "";
+  if (a.length <= 12) return a;
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
 export default function PoolHero({
@@ -46,25 +58,26 @@ export default function PoolHero({
     async function load() {
       try {
         const r = await fetch("/api/pool", { cache: "no-store" });
-        if (!r.ok) return;
         const j = (await r.json()) as PoolInfo;
         if (!cancelled) setInfo(j);
       } catch {}
     }
     load();
-    const t = setInterval(load, 15_000);
+    const t = setInterval(load, 10_000);
     return () => {
       cancelled = true;
       clearInterval(t);
     };
   }, []);
 
-  const balance = info ? Number(info.balance) : 0;
+  const distNum = info?.distributable ? Number(info.distributable) : 0;
   const perRound =
-    info && info.payoutBps > 0 ? balance * (info.payoutBps / 10_000) : 0;
-  const usd = formatUsd(info?.usdValue ?? null);
+    info && info.payoutBps > 0 ? distNum * (info.payoutBps / 10_000) : 0;
+  const distUsd = formatUsd(info?.distributableUsd);
   const perRoundUsd = formatUsd(
-    info?.usdValue != null ? info.usdValue * (info.payoutBps / 10_000) : null,
+    info?.distributableUsd != null
+      ? info.distributableUsd * (info.payoutBps / 10_000)
+      : null,
   );
 
   return (
@@ -94,28 +107,25 @@ export default function PoolHero({
               className={`chip ${
                 info.autoPayout
                   ? "border-emerald-400/40 text-emerald-300"
-                  : ""
-              }`}
-              title={
-                info.autoPayout
-                  ? "Hot-wallet auto-payout is armed."
                   : info.configured
-                    ? "Pool wallet configured (read-only). Set POOL_WALLET_PRIVATE_KEY to enable auto-payout."
-                    : "Pool is running in demo mode. Configure POOL_* env vars to go live."
-              }
+                    ? "border-amber-400/40 text-amber-300"
+                    : "border-red-400/40 text-red-300"
+              }`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
                   info.autoPayout
                     ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]"
-                    : "bg-amber-400"
+                    : info.configured
+                      ? "bg-amber-400"
+                      : "bg-red-400"
                 }`}
               />
               {info.autoPayout
                 ? "auto-payout armed"
                 : info.configured
                   ? "read-only pool"
-                  : "demo pool"}
+                  : "pool not configured"}
             </span>
           )}
         </div>
@@ -135,22 +145,47 @@ export default function PoolHero({
               className="gold-text font-black leading-none tracking-tight"
               style={{ fontSize: "clamp(56px, 12vw, 160px)" }}
             >
-              {formatNumber(balance)}
+              {info?.configured
+                ? formatNumber(distNum)
+                : info == null
+                  ? "…"
+                  : "—"}
             </div>
             <div className="pb-2 text-2xl font-semibold text-white/70">
-              {info?.symbol ?? "TOKEN"}
+              {info?.symbol ?? "ETH"}
             </div>
           </div>
-          {usd && (
+          {distUsd && (
             <div className="mt-2 text-lg text-white/50">
-              ≈ <span className="text-white/80">{usd}</span> USD
+              ≈ <span className="text-white/80">{distUsd}</span> USD
+            </div>
+          )}
+          {info?.configured && info.balance && (
+            <div className="mono mt-3 text-xs text-white/40">
+              Wallet balance{" "}
+              <span className="text-white/70">
+                {formatNumber(Number(info.balance))} {info.symbol}
+              </span>{" "}
+              · gas reserve{" "}
+              <span className="text-white/70">
+                {info.reserve} {info.symbol}
+              </span>
+            </div>
+          )}
+          {info?.error && (
+            <div className="mt-3 text-sm text-red-300">
+              RPC error: {info.error}
             </div>
           )}
 
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <MiniStat
               label="Paid this round"
-              value={`${formatNumber(perRound)} ${info?.symbol ?? ""}`}
+              value={
+                info?.configured
+                  ? `${formatNumber(perRound)} ${info.symbol}`
+                  : "—"
+              }
               sub={perRoundUsd ? `≈ ${perRoundUsd}` : undefined}
               accent
             />
@@ -159,18 +194,29 @@ export default function PoolHero({
               value={
                 info
                   ? `${(info.payoutBps / 100).toFixed(2)}% / round`
-                  : "1% / round"
+                  : "…"
               }
             />
-            <MiniStat
-              label="Cadence"
-              value="every 3 min"
-            />
+            <MiniStat label="Cadence" value="every 3 min" />
           </div>
 
           {info?.walletAddress && (
-            <div className="mono mt-4 break-all text-[11px] text-white/40">
-              Pool wallet: {info.walletAddress}
+            <div className="mono mt-4 flex flex-wrap items-center gap-2 text-[11px] text-white/40">
+              Pool wallet:
+              {info.walletExplorer ? (
+                <a
+                  href={info.walletExplorer}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="break-all text-[color:var(--gold-bright)] underline decoration-[color:var(--gold-bright)]/40 hover:decoration-[color:var(--gold-bright)]"
+                >
+                  {shortAddr(info.walletAddress)} ↗
+                </a>
+              ) : (
+                <span className="break-all">
+                  {shortAddr(info.walletAddress)}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -188,11 +234,7 @@ export default function PoolHero({
             {winningNumber ? (
               <div
                 className="ball ball-drawn relative"
-                style={{
-                  width: 220,
-                  height: 220,
-                  fontSize: 88,
-                }}
+                style={{ width: 220, height: 220, fontSize: 88 }}
               >
                 {winningNumber}
               </div>
@@ -234,9 +276,7 @@ function MiniStat({
       >
         {value}
       </div>
-      {sub && (
-        <div className="mono mt-0.5 text-[11px] text-white/40">{sub}</div>
-      )}
+      {sub && <div className="mono mt-0.5 text-[11px] text-white/40">{sub}</div>}
     </div>
   );
 }

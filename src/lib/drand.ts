@@ -112,6 +112,7 @@ async function boundedInt(
 
 export type DrawResult = {
   round: number;
+  displayedRound?: number;
   signature: string;
   numbers: number[];
   poolSize: number;

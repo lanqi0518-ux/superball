@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-import { loadConfig, readPoolBalance, formatToken } from "@/lib/chain";
+import {
+  distributable,
+  explorerAddress,
+  formatAmount,
+  loadConfig,
+  readPoolBalance,
+} from "@/lib/chain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const DEMO_POOL_TOKENS = 1_250_000;
 
 export async function GET() {
   const cfg = loadConfig();
@@ -13,33 +17,42 @@ export async function GET() {
       configured: false,
       symbol: cfg.tokenSymbol,
       decimals: cfg.tokenDecimals,
-      balanceRaw: null,
-      balance: DEMO_POOL_TOKENS.toString(),
-      usdValue: null,
-      walletAddress: null,
-      payoutBps: cfg.payoutBpsPerRound,
-      demo: true,
+      native: cfg.native,
+      walletAddress: cfg.walletAddress || null,
+      payoutBps: cfg.payoutBps,
     });
   }
   try {
     const raw = await readPoolBalance(cfg);
-    const balance = formatToken(raw, cfg);
+    const dist = distributable(raw, cfg);
+    const balance = formatAmount(raw, cfg);
+    const distributableStr = formatAmount(dist, cfg);
+    const reserve = formatAmount(cfg.gasReserveWei, cfg);
     const usdValue = cfg.usdPricePerToken
       ? Number(balance) * cfg.usdPricePerToken
       : null;
+    const distributableUsd = cfg.usdPricePerToken
+      ? Number(distributableStr) * cfg.usdPricePerToken
+      : null;
     return NextResponse.json({
       configured: true,
+      native: cfg.native,
       symbol: cfg.tokenSymbol,
       decimals: cfg.tokenDecimals,
-      balanceRaw: raw.toString(),
       balance,
+      balanceRaw: raw.toString(),
+      distributable: distributableStr,
+      distributableRaw: dist.toString(),
+      reserve,
+      reserveRaw: cfg.gasReserveWei.toString(),
       usdValue,
+      distributableUsd,
       walletAddress: cfg.walletAddress,
+      walletExplorer: explorerAddress(cfg, cfg.walletAddress),
       chainId: cfg.chainId,
-      tokenAddress: cfg.tokenAddress,
-      payoutBps: cfg.payoutBpsPerRound,
+      tokenAddress: cfg.tokenAddress ?? null,
+      payoutBps: cfg.payoutBps,
       autoPayout: cfg.keyLoaded,
-      demo: false,
     });
   } catch (err) {
     return NextResponse.json(

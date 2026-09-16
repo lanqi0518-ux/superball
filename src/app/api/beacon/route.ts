@@ -18,11 +18,15 @@ export async function GET() {
   const currentBeaconRound = roundAt(now);
   const currentRound = currentDrawRound(now);
   const nextRound = nextDrawRound(now);
+  const offset = Number(process.env.POOL_ROUND_OFFSET ?? "0");
   return NextResponse.json({
     now,
     beaconRound: currentBeaconRound,
     currentRound,
     nextRound,
+    displayedCurrentRound: Math.max(0, currentRound - offset),
+    displayedNextRound: Math.max(0, nextRound - offset),
+    roundOffset: offset,
     currentDrawAt: timeOfRound(currentRound),
     nextDrawAt: timeOfRound(nextRound),
     drawIntervalSeconds: DRAW_INTERVAL_SECONDS,
