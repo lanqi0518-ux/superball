@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DrawResult } from "@/lib/drand";
 import HoldersSection from "./HoldersSection";
+import PoolHero from "./PoolHero";
+import AutoPayoutSection from "./AutoPayoutSection";
 
 type BeaconMeta = {
   now: number;
@@ -95,71 +97,29 @@ export default function HomeClient({
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8 sm:px-6 md:py-14">
       <Header />
 
-      <section className="panel p-6 md:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="chip">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  drawing
-                    ? "bg-[color:var(--gold-bright)] shadow-[0_0_8px_rgba(242,217,141,0.9)] animate-pulse"
-                    : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]"
-                }`}
-              />
-              {drawing ? "Drawing…" : "Live · auto-drawing"}
-            </div>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">
-              Winning number
-            </h2>
-            <p className="mt-1 text-sm text-white/60">
-              Drawn from drand round{" "}
-              <span className="mono text-[color:var(--gold-bright)]">
-                #{draw?.round ?? "…"}
-              </span>
-              . A new number settles every 3 minutes.
-            </p>
-          </div>
-        </div>
+      <PoolHero
+        countdown={
+          secondsToNext === null ? "…" : formatCountdown(secondsToNext)
+        }
+        drawing={drawing}
+        winningNumber={winningNumber}
+      />
 
-        <div className="mt-8 flex flex-col items-center gap-8 md:flex-row md:items-center md:justify-around">
-          <div className="flex items-center justify-center">
-            {winningNumber ? (
-              <DrawnBall n={winningNumber} size={180} />
-            ) : (
-              <div
-                className="ball ball-idle opacity-40"
-                style={{ width: 180, height: 180, fontSize: 64 }}
-              >
-                ?
-              </div>
-            )}
-          </div>
-
-          <div className="grid w-full max-w-md grid-cols-1 gap-3 sm:grid-cols-3 md:max-w-lg">
-            <Stat
-              label="Next draw round"
-              value={meta ? `#${meta.nextRound}` : "…"}
-            />
-            <Stat
-              label="Countdown"
-              value={
-                secondsToNext === null ? "…" : formatCountdown(secondsToNext)
-              }
-              accent
-            />
-            <Stat
-              label="Draw cadence"
-              value={
-                meta
-                  ? `${Math.round(meta.drawIntervalSeconds / 60)} min`
-                  : "3 min"
-              }
-            />
-          </div>
-        </div>
-      </section>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Stat label="Round" value={draw ? `#${draw.round}` : "…"} />
+        <Stat
+          label="Next draw round"
+          value={meta ? `#${meta.nextRound}` : "…"}
+        />
+        <Stat
+          label="Beacon"
+          value={meta ? `#${meta.beaconRound}` : "…"}
+        />
+      </div>
 
       <HoldersSection draw={draw} />
+
+      <AutoPayoutSection />
 
       <FairnessSection draw={draw} />
 
@@ -246,17 +206,6 @@ function Stat({
       >
         {value}
       </div>
-    </div>
-  );
-}
-
-function DrawnBall({ n, size }: { n: number; size: number }) {
-  return (
-    <div
-      className="ball ball-drawn"
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
-    >
-      {n}
     </div>
   );
 }
