@@ -6,6 +6,7 @@ import {
   loadConfig,
   readPoolBalance,
 } from "@/lib/chain";
+import { usdPriceFor } from "@/lib/price";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,17 +24,17 @@ export async function GET() {
     });
   }
   try {
-    const raw = await readPoolBalance(cfg);
+    const [raw, price] = await Promise.all([
+      readPoolBalance(cfg),
+      usdPriceFor(cfg.tokenSymbol),
+    ]);
     const dist = distributable(raw, cfg);
     const balance = formatAmount(raw, cfg);
     const distributableStr = formatAmount(dist, cfg);
     const reserve = formatAmount(cfg.gasReserveWei, cfg);
-    const usdValue = cfg.usdPricePerToken
-      ? Number(balance) * cfg.usdPricePerToken
-      : null;
-    const distributableUsd = cfg.usdPricePerToken
-      ? Number(distributableStr) * cfg.usdPricePerToken
-      : null;
+    const usdValue = price != null ? Number(balance) * price : null;
+    const distributableUsd =
+      price != null ? Number(distributableStr) * price : null;
     return NextResponse.json({
       configured: true,
       native: cfg.native,
@@ -47,6 +48,7 @@ export async function GET() {
       reserveRaw: cfg.gasReserveWei.toString(),
       usdValue,
       distributableUsd,
+      usdPrice: price,
       walletAddress: cfg.walletAddress,
       walletExplorer: explorerAddress(cfg, cfg.walletAddress),
       chainId: cfg.chainId,

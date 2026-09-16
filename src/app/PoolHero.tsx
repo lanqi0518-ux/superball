@@ -12,6 +12,7 @@ type PoolInfo = {
   reserve?: string;
   usdValue?: number | null;
   distributableUsd?: number | null;
+  usdPrice?: number | null;
   walletAddress: string | null;
   walletExplorer?: string;
   chainId?: number;
@@ -156,8 +157,19 @@ export default function PoolHero({
             </div>
           </div>
           {distUsd && (
-            <div className="mt-2 text-lg text-white/50">
-              ≈ <span className="text-white/80">{distUsd}</span> USD
+            <div className="mt-2 flex flex-wrap items-baseline gap-3 text-lg text-white/50">
+              <span>
+                ≈ <span className="text-white/80">{distUsd}</span> USD
+              </span>
+              {info?.usdPrice != null && info.symbol && (
+                <span className="mono text-xs text-white/40">
+                  1 {info.symbol} ={" "}
+                  {info.usdPrice.toLocaleString(undefined, {
+                    maximumFractionDigits: info.usdPrice < 1 ? 6 : 2,
+                  })}{" "}
+                  USD
+                </span>
+              )}
             </div>
           )}
           {info?.configured && info.balance && (
