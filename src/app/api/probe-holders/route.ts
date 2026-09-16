@@ -56,7 +56,7 @@ export async function GET(req: Request) {
   };
   const raw = url.searchParams.get("raw") === "1";
   if (raw) {
-    const target = `${explorerBase.replace(/\/$/, "")}/api/v2/tokens/${tokenAddress}/holders?limit=5`;
+    const target = `${explorerBase.replace(/\/$/, "")}/api/v2/tokens/${tokenAddress}/holders`;
     try {
       const t0 = Date.now();
       const res = await fetch(target, {

@@ -81,23 +81,37 @@ export async function fetchSnapshotHolders(
     }) as Promise<string>,
   ]);
 
-  const url = `${snap.explorerBase}/api/v2/tokens/${snap.tokenAddress}/holders?limit=${snap.limit}`;
-  const res = await fetch(url, {
-    headers: {
-      accept: "application/json",
-      "user-agent":
-        "Mozilla/5.0 (compatible; SuperBallDraw/1.0; +https://superball-draw.fly.dev)",
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`blockscout holders fetch ${res.status}`);
+  // Blockscout v2 tokens/{addr}/holders returns 50 per page and paginates
+  // via next_page_params. We fetch pages until we hit snap.limit holders.
+  const headers = {
+    accept: "application/json",
+    "user-agent":
+      "Mozilla/5.0 (compatible; SuperBallDraw/1.0; +https://superball-draw.fly.dev)",
+  };
+  const items: BlockscoutHoldersResponse["items"] = [];
+  let cursor: string | null = null;
+  const base = `${snap.explorerBase}/api/v2/tokens/${snap.tokenAddress}/holders`;
+  for (let page = 0; page < 20; page++) {
+    const u = cursor ? `${base}?${cursor}` : base;
+    const res: Response = await fetch(u, { headers, cache: "no-store" });
+    if (!res.ok) throw new Error(`blockscout holders fetch ${res.status}`);
+    const data = (await res.json()) as BlockscoutHoldersResponse & {
+      next_page_params?: Record<string, string | number> | null;
+    };
+    for (const it of data.items ?? []) items.push(it);
+    if (items.length >= snap.limit) break;
+    const npp = data.next_page_params;
+    if (!npp) break;
+    cursor = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(npp).map(([k, v]) => [k, String(v)]),
+      ),
+    ).toString();
   }
-  const data = (await res.json()) as BlockscoutHoldersResponse;
 
   const excluded: string[] = [];
   const holders: Holder[] = [];
-  for (const it of data.items ?? []) {
+  for (const it of items.slice(0, snap.limit)) {
     const addr = it.address?.hash?.toLowerCase();
     if (!addr) continue;
     if (snap.excluded.has(addr)) {
