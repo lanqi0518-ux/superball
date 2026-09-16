@@ -44,6 +44,8 @@ export const metadata: Metadata = {
     description:
       "Provably-fair on-chain lottery on Robinhood Chain. Every 3 minutes.",
     images: ["/header.png"],
+    site: "@superballonrh",
+    creator: "@superballonrh",
   },
 };
 

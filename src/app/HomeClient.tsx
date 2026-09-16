@@ -132,17 +132,48 @@ export default function HomeClient({
 
       <HistorySection history={history} />
 
-      <footer className="mt-6 pb-4 text-center text-xs text-white/40">
-        Randomness by{" "}
-        <a
-          className="underline decoration-white/20 hover:text-[color:var(--gold-bright)]"
-          href="https://drand.love"
-          target="_blank"
-          rel="noreferrer"
-        >
-          drand · League of Entropy
-        </a>
-        . No wallet, no house edge on the RNG — the signature is the entropy.
+      <footer className="mt-6 flex flex-col items-center gap-3 pb-4 text-center text-xs text-white/40">
+        <div className="flex items-center gap-3">
+          <a
+            href="https://x.com/superballonrh"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--panel-border)] bg-white/[0.03] px-3 py-1.5 text-white/70 transition-colors hover:border-[color:var(--gold)] hover:text-[color:var(--gold-bright)]"
+          >
+            <XIcon className="h-3.5 w-3.5" />
+            <span className="mono">@superballonrh</span>
+          </a>
+          <a
+            href="https://github.com/lanqi0518-ux/superball"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--panel-border)] bg-white/[0.03] px-3 py-1.5 text-white/70 transition-colors hover:border-[color:var(--gold)] hover:text-[color:var(--gold-bright)]"
+          >
+            <GitHubIcon className="h-3.5 w-3.5" />
+            <span className="mono">source</span>
+          </a>
+        </div>
+        <div>
+          Randomness by{" "}
+          <a
+            className="underline decoration-white/20 hover:text-[color:var(--gold-bright)]"
+            href="https://drand.love"
+            target="_blank"
+            rel="noreferrer"
+          >
+            drand · League of Entropy
+          </a>
+          . On-chain payouts on{" "}
+          <a
+            className="underline decoration-white/20 hover:text-[color:var(--gold-bright)]"
+            href="https://robinhoodchain.blockscout.com"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Robinhood Chain
+          </a>
+          . The signature is the entropy.
+        </div>
       </footer>
     </div>
   );
@@ -183,9 +214,21 @@ function Header() {
           </p>
         </div>
         <div className="flex flex-col items-start gap-2 sm:items-end">
-          <div className="chip">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-            Beacon live
+          <div className="flex items-center gap-2">
+            <a
+              href="https://x.com/superballonrh"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Follow @superballonrh on X"
+              className="group inline-flex h-8 items-center gap-1.5 rounded-full border border-[color:var(--panel-border)] bg-white/[0.03] px-3 text-xs text-white/70 transition-colors hover:border-[color:var(--gold)] hover:bg-[color:var(--gold)]/[0.08] hover:text-[color:var(--gold-bright)]"
+            >
+              <XIcon className="h-3.5 w-3.5" />
+              <span className="mono">@superballonrh</span>
+            </a>
+            <div className="chip">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+              Beacon live
+            </div>
           </div>
           <span className="mono text-[11px] text-white/40">
             chain 8990e7…1b2ce
@@ -193,6 +236,32 @@ function Header() {
         </div>
       </div>
     </header>
+  );
+}
+
+function XIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      className={className}
+    >
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
+
+function GitHubIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      className={className}
+    >
+      <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.93c.58.1.79-.25.79-.56v-2.17c-3.2.7-3.88-1.37-3.88-1.37-.52-1.32-1.28-1.67-1.28-1.67-1.04-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.44-2.28 1.17-3.08-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.17.91-.25 1.89-.38 2.86-.38.97 0 1.94.13 2.86.38 2.19-1.48 3.15-1.17 3.15-1.17.62 1.57.23 2.73.11 3.02.73.8 1.17 1.83 1.17 3.08 0 4.41-2.69 5.38-5.25 5.67.41.35.78 1.05.78 2.12v3.14c0 .31.21.66.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z" />
+    </svg>
   );
 }
 
