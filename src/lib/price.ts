@@ -29,7 +29,11 @@ export async function usdPriceFor(symbol: string): Promise<number | null> {
     const n = Number(override);
     return Number.isFinite(n) ? n : null;
   }
-  const idOverride = process.env.POOL_USD_PRICE_ID;
+  // Runtime config wins (hot-swappable via /api/admin/config).
+  const { getRuntimeConfig } = await import("./runtimeConfig");
+  const runtime = await getRuntimeConfig();
+  const idOverride =
+    runtime.usdPriceId || process.env.POOL_USD_PRICE_ID || undefined;
   const id = idOverride ?? SYMBOL_TO_ID[symbol.toUpperCase()];
   if (!id) return null;
 

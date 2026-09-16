@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const snap = loadSnapshotConfig();
+  const snap = await loadSnapshotConfig();
   if (!snap) {
     return NextResponse.json({
       configured: false,

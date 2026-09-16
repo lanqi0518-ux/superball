@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
   let holders: Holder[] = [];
   let holderSource = "manual";
-  const snap = loadSnapshotConfig();
+  const snap = await loadSnapshotConfig();
   if (body.holders) {
     holders = parseHolders(body.holders);
     holderSource = "request";

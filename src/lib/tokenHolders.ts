@@ -2,6 +2,11 @@ import type { Address } from "viem";
 import { formatUnits, getAddress, parseAbi } from "viem";
 import { publicClient, loadConfig, type ChainConfig } from "./chain";
 import type { Holder } from "./holders";
+import {
+  effectiveExcludes,
+  effectiveHolderLimit,
+  effectiveHolderTokenAddress,
+} from "./runtimeConfig";
 
 export type SnapshotSource = "blockscout" | "onchain" | "manual";
 
@@ -19,32 +24,30 @@ const ERC20_ABI = parseAbi([
   "function symbol() view returns (string)",
 ]);
 
-export function loadSnapshotConfig(): SnapshotConfig | null {
+export async function loadSnapshotConfig(): Promise<SnapshotConfig | null> {
   const cfg = loadConfig();
-  const tokenAddress = process.env.POOL_HOLDER_TOKEN_ADDRESS as
-    | Address
-    | undefined;
-  if (!tokenAddress || !cfg.chainId || !cfg.rpcUrl) return null;
+  const tokenAddressStr = await effectiveHolderTokenAddress();
+  if (!tokenAddressStr || !cfg.chainId || !cfg.rpcUrl) return null;
+  let tokenAddress: Address;
+  try {
+    tokenAddress = getAddress(tokenAddressStr);
+  } catch {
+    return null;
+  }
   const explorerBase =
     process.env.POOL_EXPLORER_URL ??
     (cfg.chainId === 4663 ? "https://robinhoodchain.blockscout.com" : "");
   if (!explorerBase) return null;
-  const limit = Math.min(
-    Math.max(1, Number(process.env.POOL_HOLDER_LIMIT ?? "100")),
-    500,
-  );
-  const excluded = new Set(
-    (process.env.POOL_EXCLUDE_ADDRESSES ?? "")
-      .split(/[\s,]+/)
-      .filter(Boolean)
-      .map((a) => a.toLowerCase()),
-  );
+  const limitRaw = await effectiveHolderLimit();
+  const limit = Math.min(Math.max(1, limitRaw), 500);
+  const extra = await effectiveExcludes();
+  const excluded = new Set(extra.map((a) => a.toLowerCase()));
   // Always exclude the pool wallet itself and common burn addresses.
   excluded.add(cfg.walletAddress.toLowerCase());
   excluded.add("0x0000000000000000000000000000000000000000");
   excluded.add("0x000000000000000000000000000000000000dead");
   return {
-    tokenAddress: getAddress(tokenAddress),
+    tokenAddress,
     explorerBase: explorerBase.replace(/\/$/, ""),
     limit,
     excluded,
