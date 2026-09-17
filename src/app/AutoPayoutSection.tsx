@@ -8,6 +8,7 @@ type Payout = {
   winningSlots: number;
   amount: string;
   txHash?: string;
+  error?: string;
 };
 
 type Settlement = {
@@ -270,23 +271,39 @@ function SettlementCard({
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="mono text-[color:var(--gold-bright)]">
-                    {formatEth(eth)} {symbol}
-                  </span>
-                  {usd != null && (
-                    <span className="mono text-xs text-white/40">
-                      ({formatUsd(usd)})
-                    </span>
-                  )}
-                  {txLink && (
-                    <a
-                      href={txLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mono text-[10px] text-white/40 underline decoration-white/20 hover:text-[color:var(--gold-bright)] hover:decoration-[color:var(--gold-bright)]"
-                    >
-                      tx ↗
-                    </a>
+                  {p.error ? (
+                    <>
+                      <span className="mono text-xs text-red-300">
+                        转账失败 (收款方拒收)
+                      </span>
+                      <span
+                        className="mono text-[10px] text-white/40"
+                        title={p.error}
+                      >
+                        ⚠
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="mono text-[color:var(--gold-bright)]">
+                        {formatEth(eth)} {symbol}
+                      </span>
+                      {usd != null && (
+                        <span className="mono text-xs text-white/40">
+                          ({formatUsd(usd)})
+                        </span>
+                      )}
+                      {txLink && (
+                        <a
+                          href={txLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mono text-[10px] text-white/40 underline decoration-white/20 hover:text-[color:var(--gold-bright)] hover:decoration-[color:var(--gold-bright)]"
+                        >
+                          tx ↗
+                        </a>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

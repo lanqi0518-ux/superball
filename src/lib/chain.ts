@@ -151,35 +151,69 @@ export function distributable(balance: bigint, cfg: ChainConfig): bigint {
   return balance > cfg.gasReserveWei ? balance - cfg.gasReserveWei : 0n;
 }
 
-export type Payout = { to: Address; amount: bigint; txHash?: Hex };
+export type Payout = {
+  to: Address;
+  amount: bigint;
+  txHash?: Hex;
+  error?: string;
+};
 
+// Parallel payouts with explicit sequential nonces + per-tx try/catch.
+// One bad recipient (e.g. contract without receive()) can't abort the round.
 export async function payWinners(
   cfg: ChainConfig,
   payouts: Payout[],
 ): Promise<Payout[]> {
+  const nonZero = payouts.filter((p) => p.amount > 0n);
+  const zero = payouts.filter((p) => p.amount <= 0n);
+  if (nonZero.length === 0) return payouts;
+
   const wc = walletClient(cfg);
   const pub = publicClient(cfg);
-  const out: Payout[] = [];
-  for (const p of payouts) {
-    if (p.amount <= 0n) {
-      out.push(p);
-      continue;
-    }
-    let hash: Hex;
-    if (cfg.native) {
-      hash = await wc.sendTransaction({ to: p.to, value: p.amount });
-    } else {
-      hash = await wc.writeContract({
-        address: cfg.tokenAddress!,
-        abi: ERC20_ABI,
-        functionName: "transfer",
-        args: [p.to, p.amount],
-      });
-    }
-    await pub.waitForTransactionReceipt({ hash });
-    out.push({ ...p, txHash: hash });
-  }
-  return out;
+  const account = wc.account;
+  const startNonce = await pub.getTransactionCount({
+    address: account.address,
+    blockTag: "pending",
+  });
+
+  const sends = nonZero.map((p, i) =>
+    (async (): Promise<Payout> => {
+      const nonce = startNonce + i;
+      try {
+        let hash: Hex;
+        if (cfg.native) {
+          hash = await wc.sendTransaction({
+            to: p.to,
+            value: p.amount,
+            nonce,
+          });
+        } else {
+          hash = await wc.writeContract({
+            address: cfg.tokenAddress!,
+            abi: ERC20_ABI,
+            functionName: "transfer",
+            args: [p.to, p.amount],
+            nonce,
+          });
+        }
+        try {
+          await pub.waitForTransactionReceipt({ hash, timeout: 30_000 });
+        } catch {
+          // Tx broadcast but receipt timed out — still succeeded to submit.
+        }
+        return { ...p, txHash: hash };
+      } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message.split("\n")[0].slice(0, 200)
+            : "send failed";
+        return { ...p, error: msg };
+      }
+    })(),
+  );
+
+  const results = await Promise.all(sends);
+  return [...results, ...zero];
 }
 
 export function formatAmount(amount: bigint, cfg: ChainConfig): string {

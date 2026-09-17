@@ -139,7 +139,10 @@ export async function POST(req: Request) {
   }
 
   const paid = await payWinners(cfg, payouts);
-  const paidTotal = paid.reduce((n, p) => n + p.amount, 0n);
+  const paidTotal = paid.reduce(
+    (n, p) => (p.txHash ? n + p.amount : n),
+    0n,
+  );
 
   const settlement = {
     round,

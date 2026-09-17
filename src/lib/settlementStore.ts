@@ -17,6 +17,7 @@ export type Settlement = {
     winningSlots: number;
     amount: string;
     txHash?: string;
+    error?: string;
   }[];
   settledAt: number;
   auto: boolean;
@@ -80,6 +81,7 @@ export function serializePayouts(
       winningSlots: info.winning,
       amount: p.amount.toString(),
       txHash: p.txHash,
+      error: p.error,
     };
   });
 }
