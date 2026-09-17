@@ -155,7 +155,7 @@ let cache: {
   at: number;
   data: Awaited<ReturnType<typeof fetchSnapshotHolders>>;
 } | null = null;
-const CACHE_TTL_SECONDS = 25;
+const CACHE_TTL_SECONDS = 90;
 
 export async function getSnapshotCached(
   snap: SnapshotConfig,
