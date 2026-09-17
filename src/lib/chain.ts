@@ -158,8 +158,10 @@ export type Payout = {
   error?: string;
 };
 
-// Parallel payouts with explicit sequential nonces + per-tx try/catch.
-// One bad recipient (e.g. contract without receive()) can't abort the round.
+// Sequential broadcast (viem auto-manages nonce so failed txs don't consume
+// one) + parallel receipt wait. One bad recipient (e.g. contract without
+// receive()) can't abort the round: it's recorded with an error and the
+// next winner still gets paid.
 export async function payWinners(
   cfg: ChainConfig,
   payouts: Payout[],
@@ -170,50 +172,46 @@ export async function payWinners(
 
   const wc = walletClient(cfg);
   const pub = publicClient(cfg);
-  const account = wc.account;
-  const startNonce = await pub.getTransactionCount({
-    address: account.address,
-    blockTag: "pending",
-  });
 
-  const sends = nonZero.map((p, i) =>
-    (async (): Promise<Payout> => {
-      const nonce = startNonce + i;
-      try {
-        let hash: Hex;
-        if (cfg.native) {
-          hash = await wc.sendTransaction({
-            to: p.to,
-            value: p.amount,
-            nonce,
-          });
-        } else {
-          hash = await wc.writeContract({
-            address: cfg.tokenAddress!,
-            abi: ERC20_ABI,
-            functionName: "transfer",
-            args: [p.to, p.amount],
-            nonce,
-          });
-        }
-        try {
-          await pub.waitForTransactionReceipt({ hash, timeout: 30_000 });
-        } catch {
-          // Tx broadcast but receipt timed out — still succeeded to submit.
-        }
-        return { ...p, txHash: hash };
-      } catch (err) {
-        const msg =
-          err instanceof Error
-            ? err.message.split("\n")[0].slice(0, 200)
-            : "send failed";
-        return { ...p, error: msg };
+  const failed: Payout[] = [];
+  const submitted: { p: Payout; hash: Hex }[] = [];
+
+  for (const p of nonZero) {
+    try {
+      let hash: Hex;
+      if (cfg.native) {
+        hash = await wc.sendTransaction({ to: p.to, value: p.amount });
+      } else {
+        hash = await wc.writeContract({
+          address: cfg.tokenAddress!,
+          abi: ERC20_ABI,
+          functionName: "transfer",
+          args: [p.to, p.amount],
+        });
       }
-    })(),
+      submitted.push({ p, hash });
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message.split("\n")[0].slice(0, 200)
+          : "send failed";
+      failed.push({ ...p, error: msg });
+    }
+  }
+
+  const receipts = await Promise.all(
+    submitted.map(async ({ p, hash }) => {
+      try {
+        await pub.waitForTransactionReceipt({ hash, timeout: 30_000 });
+      } catch {
+        // Broadcast succeeded but receipt confirmation timed out —
+        // still count as sent, the tx hash is the source of truth.
+      }
+      return { ...p, txHash: hash };
+    }),
   );
 
-  const results = await Promise.all(sends);
-  return [...results, ...zero];
+  return [...receipts, ...failed, ...zero];
 }
 
 export function formatAmount(amount: bigint, cfg: ChainConfig): string {
