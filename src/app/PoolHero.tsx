@@ -64,7 +64,7 @@ export default function PoolHero({
       } catch {}
     }
     load();
-    const t = setInterval(load, 10_000);
+    const t = setInterval(load, 20_000);
     return () => {
       cancelled = true;
       clearInterval(t);

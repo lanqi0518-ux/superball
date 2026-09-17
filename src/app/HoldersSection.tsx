@@ -51,7 +51,7 @@ export default function HoldersSection({ draw }: { draw: DrawResult | null }) {
       } catch {}
     }
     load();
-    const t = setInterval(load, 25_000);
+    const t = setInterval(load, 45_000);
     return () => {
       cancelled = true;
       clearInterval(t);

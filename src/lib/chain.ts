@@ -1,6 +1,7 @@
 import {
   createPublicClient,
   createWalletClient,
+  fallback,
   http,
   parseAbi,
   parseEther,
@@ -116,10 +117,27 @@ const ERC20_ABI = parseAbi([
   "function transfer(address to, uint256 amount) returns (bool)",
 ]);
 
+function transportFor(cfg: ChainConfig) {
+  const urls = [cfg.rpcUrl];
+  const backup = process.env.POOL_RPC_URL_BACKUP;
+  if (backup && backup !== cfg.rpcUrl) urls.push(backup);
+  return fallback(
+    urls.map((url) =>
+      http(url, {
+        retryCount: 4,
+        retryDelay: 300,
+        timeout: 15_000,
+        batch: { wait: 20 },
+      }),
+    ),
+    { rank: false },
+  );
+}
+
 export function publicClient(cfg: ChainConfig) {
   return createPublicClient({
     chain: pickChain(cfg.chainId),
-    transport: http(cfg.rpcUrl),
+    transport: transportFor(cfg),
   });
 }
 
@@ -129,21 +147,49 @@ export function walletClient(cfg: ChainConfig) {
   return createWalletClient({
     account,
     chain: pickChain(cfg.chainId),
-    transport: http(cfg.rpcUrl),
+    transport: transportFor(cfg),
   });
 }
 
+// Cache balance reads for 8s to protect the public RPC from rate limits.
+// Freshness is fine — pool changes at most every few seconds.
+let balanceCache: { key: string; at: number; value: bigint } | null = null;
+const BALANCE_TTL_MS = 8_000;
+
 export async function readPoolBalance(cfg: ChainConfig): Promise<bigint> {
-  const client = publicClient(cfg);
-  if (cfg.native) {
-    return client.getBalance({ address: cfg.walletAddress });
+  const key = `${cfg.chainId}:${cfg.walletAddress}:${cfg.native ? "native" : cfg.tokenAddress}`;
+  const now = Date.now();
+  if (balanceCache && balanceCache.key === key && now - balanceCache.at < BALANCE_TTL_MS) {
+    return balanceCache.value;
   }
-  return (await client.readContract({
-    address: cfg.tokenAddress!,
-    abi: ERC20_ABI,
-    functionName: "balanceOf",
-    args: [cfg.walletAddress],
-  })) as bigint;
+  const client = publicClient(cfg);
+  const value = cfg.native
+    ? await client.getBalance({ address: cfg.walletAddress })
+    : ((await client.readContract({
+        address: cfg.tokenAddress!,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [cfg.walletAddress],
+      })) as bigint);
+  balanceCache = { key, at: now, value };
+  return value;
+}
+
+// Direct RPC read that bypasses the cache — used by /api/settle so payouts
+// are computed against the freshest balance.
+export async function readPoolBalanceFresh(cfg: ChainConfig): Promise<bigint> {
+  const client = publicClient(cfg);
+  const value = cfg.native
+    ? await client.getBalance({ address: cfg.walletAddress })
+    : ((await client.readContract({
+        address: cfg.tokenAddress!,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [cfg.walletAddress],
+      })) as bigint);
+  const key = `${cfg.chainId}:${cfg.walletAddress}:${cfg.native ? "native" : cfg.tokenAddress}`;
+  balanceCache = { key, at: Date.now(), value };
+  return value;
 }
 
 export function distributable(balance: bigint, cfg: ChainConfig): bigint {
@@ -172,30 +218,62 @@ export async function payWinners(
 
   const wc = walletClient(cfg);
   const pub = publicClient(cfg);
+  const account = wc.account;
+
+  // Local nonce counter — Robinhood Chain's `pending` nonce lags after
+  // recent broadcasts, so we cannot rely on viem's auto-fetch between
+  // sequential sends. We increment locally on each successful broadcast
+  // and re-sync from RPC on any nonce-related error.
+  const refreshNonce = () =>
+    pub.getTransactionCount({
+      address: account.address,
+      blockTag: "pending",
+    });
+  let nonce = await refreshNonce();
 
   const failed: Payout[] = [];
   const submitted: { p: Payout; hash: Hex }[] = [];
 
   for (const p of nonZero) {
-    try {
-      let hash: Hex;
-      if (cfg.native) {
-        hash = await wc.sendTransaction({ to: p.to, value: p.amount });
-      } else {
-        hash = await wc.writeContract({
-          address: cfg.tokenAddress!,
-          abi: ERC20_ABI,
-          functionName: "transfer",
-          args: [p.to, p.amount],
-        });
+    let attempt = 0;
+    // Up to 2 tries per payout: once with local nonce, once after refresh.
+    while (attempt < 2) {
+      attempt++;
+      try {
+        let hash: Hex;
+        if (cfg.native) {
+          hash = await wc.sendTransaction({
+            to: p.to,
+            value: p.amount,
+            nonce,
+          });
+        } else {
+          hash = await wc.writeContract({
+            address: cfg.tokenAddress!,
+            abi: ERC20_ABI,
+            functionName: "transfer",
+            args: [p.to, p.amount],
+            nonce,
+          });
+        }
+        submitted.push({ p, hash });
+        nonce++;
+        break;
+      } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message.split("\n")[0].slice(0, 200)
+            : "send failed";
+        // If the failure is nonce-related, refresh from RPC and retry once.
+        if (/nonce/i.test(msg) && attempt < 2) {
+          try {
+            nonce = await refreshNonce();
+          } catch {}
+          continue;
+        }
+        failed.push({ ...p, error: msg });
+        break;
       }
-      submitted.push({ p, hash });
-    } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message.split("\n")[0].slice(0, 200)
-          : "send failed";
-      failed.push({ ...p, error: msg });
     }
   }
 

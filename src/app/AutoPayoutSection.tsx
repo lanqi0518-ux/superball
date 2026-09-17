@@ -94,7 +94,7 @@ export default function AutoPayoutSection() {
       } catch {}
     }
     load();
-    const t = setInterval(load, 15_000);
+    const t = setInterval(load, 30_000);
     return () => {
       cancelled = true;
       clearInterval(t);

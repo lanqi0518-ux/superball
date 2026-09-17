@@ -10,7 +10,7 @@ import {
   distributable,
   loadConfig,
   payWinners,
-  readPoolBalance,
+  readPoolBalanceFresh,
   type Payout,
 } from "@/lib/chain";
 import { allocateAll, parseHolders, type Holder } from "@/lib/holders";
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
     } catch {}
   }
 
-  const totalBalance = await readPoolBalance(cfg);
+  const totalBalance = await readPoolBalanceFresh(cfg);
   const dist = distributable(totalBalance, cfg);
   const roundPool = (dist * BigInt(cfg.payoutBps)) / 10_000n;
 
