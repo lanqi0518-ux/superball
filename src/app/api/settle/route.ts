@@ -29,6 +29,10 @@ function offset(): number {
   return Number(process.env.POOL_ROUND_OFFSET ?? "0");
 }
 
+// In-memory lock so concurrent cron POSTs for the same round don't race
+// on the wallet nonce. Second concurrent call returns {locked:true}.
+const inFlight = new Set<number>();
+
 export async function GET() {
   return NextResponse.json({ settlements: (await list()).slice(0, 20) });
 }
@@ -96,6 +100,15 @@ export async function POST(req: Request) {
       round,
     });
   }
+  if (inFlight.has(round)) {
+    return NextResponse.json({
+      skipped: true,
+      reason: "settlement in progress on another request",
+      round,
+    });
+  }
+  inFlight.add(round);
+  try {
 
   const beacon = await fetchBeacon(round);
   const draw = await deriveDraw(beacon);
@@ -161,4 +174,7 @@ export async function POST(req: Request) {
   await record(settlement);
 
   return NextResponse.json({ ok: true, settlement });
+  } finally {
+    inFlight.delete(round);
+  }
 }
